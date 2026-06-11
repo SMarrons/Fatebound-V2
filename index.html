@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fatebound — Dungeon Crawler</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --gold: #d6b26e;
+    --parchment: #e8dfc8;
+    --panel: rgba(15, 12, 16, 0.93);
+    --panel-edge: rgba(214, 178, 110, 0.28);
+    --hp: #c94f43;
+    --mp: #4a72c9;
+    --ember: #ff9c4a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #070609; }
+  body { font-family: "Source Sans 3", sans-serif; color: var(--parchment); }
+  #game { position: absolute; inset: 0; display: block; cursor: crosshair; }
+  .gold { color: var(--gold); }
+  .ember-text { color: var(--ember); }
+  .dim { color: rgba(232, 223, 200, 0.45); }
+  button { font-family: inherit; cursor: pointer; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: absolute; inset: 0; pointer-events: none; display: none; }
+  #hud-floor {
+    position: absolute; top: 18px; left: 50%; transform: translateX(-50%);
+    font-family: "Cinzel", serif; font-size: 15px; letter-spacing: 0.14em;
+    color: rgba(232, 223, 200, 0.85); text-transform: uppercase;
+    text-shadow: 0 1px 6px rgba(0,0,0,0.8);
+  }
+  #toast {
+    position: absolute; top: 48px; left: 50%; transform: translateX(-50%) translateY(-6px);
+    background: var(--panel); border: 1px solid var(--panel-edge);
+    padding: 7px 16px; border-radius: 6px; font-size: 14px;
+    opacity: 0; transition: opacity 0.25s, transform 0.25s; white-space: nowrap;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #hud-topright {
+    position: absolute; top: 16px; right: 18px; display: flex; gap: 16px;
+    font-size: 15px; font-weight: 600; text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+    align-items: center;
+  }
+  .res { display: flex; align-items: center; gap: 6px; }
+  .coin-ic, .ember-ic {
+    width: 11px; height: 11px; display: inline-block; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #ffe49a, #c79a2a);
+  }
+  .ember-ic {
+    border-radius: 2px; transform: rotate(45deg);
+    background: radial-gradient(circle at 35% 35%, #ffc88a, #e06b1f);
+  }
+  #hud-bottom {
+    position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: flex-end; gap: 14px; pointer-events: auto;
+  }
+  #hud-level-wrap {
+    width: 46px; height: 46px; border-radius: 50%;
+    background: var(--panel); border: 1px solid var(--gold);
+    display: flex; align-items: center; justify-content: center;
+    font-family: "Cinzel", serif; font-size: 19px; font-weight: 700; color: var(--gold);
+    position: relative;
+  }
+  #stat-alert {
+    position: absolute; top: -2px; right: -2px; width: 11px; height: 11px;
+    background: var(--ember); border-radius: 50%; display: none;
+    box-shadow: 0 0 8px var(--ember);
+  }
+  #bars { display: flex; flex-direction: column; gap: 5px; width: 320px; }
+  .bar {
+    height: 17px; background: rgba(10, 8, 12, 0.85); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 4px; position: relative; overflow: hidden;
+  }
+  .bar-fill { position: absolute; inset: 0; width: 60%; transition: width 0.15s; }
+  #hp-fill { background: linear-gradient(180deg, #d8675b, #a83a2f); }
+  #mp-fill { background: linear-gradient(180deg, #5d83d8, #3551a8); }
+  .bar-text {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 11.5px; font-weight: 700; color: rgba(255,255,255,0.92);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.8); letter-spacing: 0.04em;
+  }
+  #xp-bar { height: 5px; background: rgba(10, 8, 12, 0.85); border-radius: 3px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); }
+  #xp-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #b08d46, #ffd24a); transition: width 0.2s; }
+  .pot-slot {
+    width: 40px; height: 46px; background: var(--panel); border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 6px; position: relative; display: flex; align-items: center; justify-content: center;
+  }
+  .pot-slot.empty { opacity: 0.45; }
+  .pot-icon { width: 16px; height: 20px; border-radius: 40% 40% 50% 50%; position: relative; }
+  .pot-icon.hp { background: radial-gradient(circle at 35% 30%, #ff9a8a, var(--hp)); }
+  .pot-icon.mp { background: radial-gradient(circle at 35% 30%, #9ab4ff, var(--mp)); }
+  .pot-n {
+    position: absolute; bottom: 2px; right: 4px; font-size: 11px; font-weight: 700;
+  }
+  .pot-key {
+    position: absolute; top: -7px; left: 50%; transform: translateX(-50%);
+    font-size: 10px; background: #2a2430; border: 1px solid rgba(255,255,255,0.2);
+    padding: 0 4px; border-radius: 3px; color: rgba(255,255,255,0.75);
+  }
+  #skill-slot, #spell-slot {
+    width: 46px; height: 46px; background: var(--panel); border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 6px; position: relative; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #skill-slot.ready { border-color: var(--gold); box-shadow: 0 0 10px rgba(214,178,110,0.25); }
+  #spell-slot.ready { border-color: #7fb4ff; box-shadow: 0 0 10px rgba(127,180,255,0.25); }
+  #spell-cd { position: absolute; left: 0; right: 0; bottom: 0; height: 0%; background: rgba(0,0,0,0.65); }
+  .slot-key {
+    position: absolute; top: 1px; left: 3px; z-index: 2;
+    font-size: 8.5px; font-weight: 700; letter-spacing: 0.04em;
+    color: rgba(255,255,255,0.55); text-shadow: 0 1px 2px rgba(0,0,0,0.9); white-space: nowrap;
+  }
+  #minimap-wrap {
+    position: absolute; top: 14px; left: 14px; width: 176px; height: 176px;
+    background: rgba(10,8,13,0.7); border: 1px solid var(--panel-edge); border-radius: 8px;
+    padding: 2px; box-shadow: 0 6px 24px rgba(0,0,0,0.4);
+  }
+  #minimap { display: block; width: 172px; height: 172px; }
+  #skill-ic { width: 20px; height: 20px; transform: rotate(45deg); border: 2.5px solid var(--gold); border-radius: 3px; }
+  #skill-cd { position: absolute; left: 0; right: 0; bottom: 0; height: 0%; background: rgba(0,0,0,0.65); }
+  #skill-name {
+    position: absolute; bottom: 70px; right: 0; left: auto;
+    font-size: 11px; color: rgba(232,223,200,0.65); text-align: center; width: 46px;
+    display: none;
+  }
+  #hud-tabs { position: absolute; bottom: 18px; right: 18px; display: flex; flex-direction: column; gap: 6px; pointer-events: auto; }
+  .tab-btn {
+    background: var(--panel); border: 1px solid rgba(255,255,255,0.15); color: var(--parchment);
+    border-radius: 6px; padding: 8px 12px; font-size: 13px; font-weight: 600;
+  }
+  .tab-btn:hover { border-color: var(--gold); color: var(--gold); }
+  .tab-btn b { color: var(--gold); font-weight: 700; }
+
+  /* ---------- panels ---------- */
+  #panel-wrap {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(5, 4, 8, 0.55); z-index: 20;
+  }
+  .panel {
+    background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 10px;
+    width: 580px; max-width: calc(100vw - 40px); max-height: calc(100vh - 60px);
+    overflow-y: auto; overflow-x: hidden; padding: 22px 24px; position: relative;
+    box-shadow: 0 18px 60px rgba(0,0,0,0.6);
+    scrollbar-width: thin; scrollbar-color: rgba(214,178,110,0.35) transparent;
+  }
+  .panel::-webkit-scrollbar { width: 8px; }
+  .panel::-webkit-scrollbar-thumb { background: rgba(214,178,110,0.3); border-radius: 4px; }
+  .panel::-webkit-scrollbar-track { background: transparent; }
+  #panel-close {
+    position: absolute; top: 30px; right: 30px; z-index: 21;
+    width: 32px; height: 32px; border-radius: 50%; background: var(--panel);
+    border: 1px solid rgba(255,255,255,0.2); color: var(--parchment); font-size: 15px;
+  }
+  #panel-close:hover { border-color: var(--gold); color: var(--gold); }
+  .panel h2 {
+    font-family: "Cinzel", serif; font-size: 18px; letter-spacing: 0.1em;
+    color: var(--gold); margin-bottom: 14px; text-transform: uppercase; font-weight: 600;
+  }
+  .panel h3 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(232,223,200,0.55); margin: 16px 0 8px; }
+
+  /* inventory */
+  #panel-inventory .inv-flex { display: flex; gap: 22px; }
+  #equip-slots { display: flex; flex-direction: column; gap: 8px; }
+  .equip-row { display: flex; align-items: center; gap: 10px; }
+  .equip-label { font-size: 13px; color: rgba(232,223,200,0.6); }
+  #inv-grid, #vendor-sell {
+    display: grid; grid-template-columns: repeat(5, 48px); gap: 6px; align-content: start;
+  }
+  .inv-cell {
+    width: 48px; height: 48px; background: rgba(255,255,255,0.045);
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .inv-cell.has-item { cursor: pointer; }
+  .inv-cell.has-item:hover { background: rgba(255,255,255,0.1); }
+  .inv-cell.r-magic { border-color: rgba(111,168,255,0.55); }
+  .inv-cell.r-rare { border-color: rgba(255,210,74,0.55); }
+  .inv-cell.r-epic { border-color: rgba(201,124,255,0.6); }
+
+  /* character */
+  .stat-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 14.5px; }
+  .stat-row span { flex: 1; color: rgba(232,223,200,0.75); }
+  .stat-row b { min-width: 60px; text-align: right; }
+  .stat-divider { height: 1px; background: rgba(255,255,255,0.1); margin: 10px 0; }
+  .plus-btn {
+    width: 24px; height: 24px; border-radius: 5px; background: rgba(214,178,110,0.15);
+    border: 1px solid var(--gold); color: var(--gold); font-size: 15px; font-weight: 700; line-height: 1;
+  }
+  .plus-btn:hover { background: rgba(214,178,110,0.35); }
+  #char-points-row {
+    display: flex; justify-content: space-between; padding: 8px 12px; margin-bottom: 8px;
+    background: rgba(214,178,110,0.1); border: 1px solid var(--panel-edge); border-radius: 6px;
+    font-size: 14px;
+  }
+  .boon-row { display: flex; align-items: baseline; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .boon-row b { font-size: 14px; white-space: nowrap; color: #9ecbff; }
+  .boon-row span { font-size: 12.5px; color: rgba(232,223,200,0.6); flex: 1; }
+
+  /* vendor */
+  #vendor-stock { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
+  .vendor-item {
+    display: flex; align-items: center; gap: 12px; padding: 7px 10px;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 6px; cursor: pointer;
+  }
+  .vendor-item:hover { background: rgba(255,255,255,0.09); border-color: var(--gold); }
+  .vi-name { flex: 1; font-size: 14px; font-weight: 600; }
+  .vi-price { font-size: 14px; font-weight: 700; }
+
+  .reroll-btn {
+    background: rgba(255,156,74,0.1); border: 1px solid rgba(255,156,74,0.4); color: #ff9c4a;
+    border-radius: 5px; font-size: 11.5px; padding: 2px 7px; cursor: pointer; font-family: inherit;
+  }
+  .reroll-btn:hover { background: rgba(255,156,74,0.22); }
+  .vendor-reroll { border-style: dashed; }
+  .vendor-reroll:hover { border-color: #ff9c4a; }
+
+  /* shrine */
+  #shrine-choices { display: flex; flex-direction: column; gap: 10px; }
+  .boon-card {
+    padding: 14px 16px; border: 1px solid rgba(158,203,255,0.35); border-radius: 8px;
+    background: rgba(94, 138, 200, 0.08); cursor: pointer; transition: all 0.15s;
+  }
+  .boon-card:hover { background: rgba(94, 138, 200, 0.2); border-color: #9ecbff; transform: translateX(4px); }
+  .boon-name { font-family: "Cinzel", serif; font-size: 15px; color: #9ecbff; margin-bottom: 3px; }
+  .boon-desc { font-size: 13.5px; color: rgba(232,223,200,0.75); }
+
+  /* altar */
+  #altar-perks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .perk-row {
+    padding: 11px 13px; border: 1px solid rgba(255,255,255,0.1); border-radius: 7px;
+    background: rgba(255,255,255,0.035); position: relative;
+  }
+  .perk-row.can-buy { cursor: pointer; border-color: rgba(255,156,74,0.4); }
+  .perk-row.can-buy:hover { background: rgba(255,156,74,0.12); border-color: var(--ember); }
+  .perk-row.maxed { opacity: 0.55; }
+  .perk-head { display: flex; justify-content: space-between; align-items: center; font-size: 14px; margin-bottom: 2px; }
+  .pips { display: flex; gap: 3px; }
+  .pip { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.15); display: inline-block; }
+  .pip.on { background: var(--ember); }
+  .perk-desc { font-size: 12.5px; color: rgba(232,223,200,0.6); margin-bottom: 5px; }
+  .perk-cost { font-size: 13px; font-weight: 700; color: var(--ember); display: flex; align-items: center; gap: 5px; }
+
+  /* tooltip */
+  #tooltip {
+    position: fixed; z-index: 50; display: none; pointer-events: none;
+    background: rgba(10, 8, 13, 0.97); border: 1px solid var(--panel-edge);
+    border-radius: 7px; padding: 11px 14px; max-width: 260px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.7); font-size: 13px;
+  }
+  .tt-name { font-weight: 700; font-size: 14.5px; margin-bottom: 1px; }
+  .tt-type { color: rgba(232,223,200,0.5); font-size: 11.5px; margin-bottom: 7px; }
+  .tt-stat { padding: 1.5px 0; }
+  .tt-affix { color: #6fa8ff; padding: 1.5px 0; }
+  .tt-dim { color: rgba(232,223,200,0.45); }
+  .tt-foot { margin-top: 7px; padding-top: 7px; border-top: 1px solid rgba(255,255,255,0.1); }
+  .tt-up { color: #8fd98a; }
+  .tt-down { color: #ff7a6b; }
+
+  /* ---------- menus ---------- */
+  .screen {
+    position: absolute; inset: 0; z-index: 30; display: none;
+    flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    background: radial-gradient(ellipse at 50% 30%, rgba(60, 38, 20, 0.35), rgba(7, 6, 9, 0.92) 70%), #0b0910;
+  }
+  .game-title {
+    font-family: "Cinzel", serif; font-size: 64px; font-weight: 700; letter-spacing: 0.18em;
+    color: var(--gold); text-shadow: 0 0 40px rgba(214, 178, 110, 0.3);
+  }
+  .game-sub {
+    font-size: 14px; letter-spacing: 0.3em; text-transform: uppercase;
+    color: rgba(232,223,200,0.5); margin-bottom: 36px;
+  }
+  .menu-btn {
+    width: 300px; padding: 13px 0; font-size: 16px; font-weight: 600;
+    background: rgba(214,178,110,0.08); color: var(--parchment);
+    border: 1px solid var(--panel-edge); border-radius: 7px; letter-spacing: 0.05em;
+  }
+  .menu-btn:hover { background: rgba(214,178,110,0.2); border-color: var(--gold); color: var(--gold); }
+  .menu-btn.primary { background: rgba(214,178,110,0.18); border-color: var(--gold); color: var(--gold); }
+  #menu-meta { margin-top: 26px; font-size: 14px; color: rgba(232,223,200,0.6); display: flex; align-items: center; gap: 6px; }
+  #menu-controls {
+    position: absolute; bottom: 26px; font-size: 12.5px; color: rgba(232,223,200,0.4);
+    letter-spacing: 0.04em;
+  }
+  #death-title { font-family: "Cinzel", serif; font-size: 46px; color: #c94f43; letter-spacing: 0.16em; text-shadow: 0 0 30px rgba(201,59,46,0.4); }
+  #death-sub { font-size: 14px; color: rgba(232,223,200,0.55); margin-bottom: 24px; }
+  #death-stats { width: 320px; margin-bottom: 28px; }
+  .d-row { display: flex; justify-content: space-between; padding: 8px 4px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 15px; }
+  .d-row span { color: rgba(232,223,200,0.6); white-space: nowrap; }
+</style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="hud-floor" data-screen-label="HUD"></div>
+    <div id="minimap-wrap"><canvas id="minimap" width="172" height="172"></canvas></div>
+    <div id="toast"></div>
+    <div id="hud-topright">
+      <div class="res"><span class="coin-ic"></span><span id="hud-gold">0</span></div>
+      <div class="res"><span class="ember-ic"></span><span id="hud-embers" class="ember-text">0</span></div>
+    </div>
+    <div id="hud-bottom">
+      <div id="hud-level-wrap"><span id="hud-level">1</span><span id="stat-alert"></span></div>
+      <div id="bars">
+        <div class="bar"><div class="bar-fill" id="hp-fill"></div><div class="bar-text" id="hp-text"></div></div>
+        <div class="bar"><div class="bar-fill" id="mp-fill"></div><div class="bar-text" id="mp-text"></div></div>
+        <div id="xp-bar"><div id="xp-fill"></div></div>
+      </div>
+      <div class="pot-slot" id="pot-hp"><span class="pot-key">1</span><div class="pot-icon hp"></div><span class="pot-n" id="pot-hp-n">0</span></div>
+      <div class="pot-slot" id="pot-mp"><span class="pot-key">2</span><div class="pot-icon mp"></div><span class="pot-n" id="pot-mp-n">0</span></div>
+      <div id="skill-slot" title="Weapon skill — press Q"><span class="slot-key">Q</span><div id="skill-ic"></div><div id="skill-cd"></div><span id="skill-name"></span></div>
+      <div id="spell-slot" title="Spellbook — hold right mouse to cast"><span class="slot-key">RMB</span><canvas id="spell-ic" width="32" height="32"></canvas><div id="spell-cd"></div></div>
+    </div>
+    <div id="hud-tabs">
+      <button class="tab-btn" data-tab="inventory"><b>I</b>nventory</button>
+      <button class="tab-btn" data-tab="character"><b>C</b>haracter</button>
+    </div>
+  </div>
+
+  <!-- Panels -->
+  <div id="panel-wrap">
+    <button id="panel-close">✕</button>
+    <div class="panel" id="panel-inventory" data-screen-label="Inventory panel">
+      <h2>Inventory</h2>
+      <div class="inv-flex">
+        <div>
+          <h3>Equipped</h3>
+          <div id="equip-slots"></div>
+        </div>
+        <div>
+          <h3>Bag — <span class="gold" id="inv-gold">0</span><span class="gold">g</span></h3>
+          <div id="inv-grid"></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel" id="panel-character" data-screen-label="Character panel">
+      <h2>Character — Level <span id="char-level">1</span></h2>
+      <div class="dim" style="margin-bottom:10px;font-size:13px" id="char-xp"></div>
+      <div id="char-points-row"><span>Unspent stat points</span><b class="gold" id="char-points">0</b></div>
+      <div id="char-stats"></div>
+      <h3>Boons of this run</h3>
+      <div id="char-boons"></div>
+    </div>
+    <div class="panel" id="panel-vendor" data-screen-label="Vendor panel">
+      <h2>Maren the Provisioner</h2>
+      <div class="dim" style="margin-bottom:12px;font-size:13.5px">Your gold: <span class="gold" id="vendor-gold">0</span><span class="gold">g</span> · click to buy</div>
+      <div id="vendor-stock"></div>
+      <h3>Your bag — right-click to sell</h3>
+      <div id="vendor-sell"></div>
+    </div>
+    <div class="panel" id="panel-shrine" data-screen-label="Shrine panel">
+      <h2>Shrine of Fate</h2>
+      <div class="dim" style="margin-bottom:14px;font-size:13.5px">The threads of fate shimmer. Choose one boon — it lasts until this run ends.</div>
+      <div id="shrine-choices"></div>
+    </div>
+    <div class="panel" id="panel-altar" data-screen-label="Altar panel">
+      <h2>Altar of Fate</h2>
+      <div class="dim" style="margin-bottom:12px;font-size:13.5px">Spend <span class="ember-text" id="altar-embers">0</span> <span class="ember-text">embers</span> on blessings that persist across every run.</div>
+      <div id="altar-perks"></div>
+    </div>
+  </div>
+
+  <div id="tooltip"></div>
+
+  <!-- Main menu -->
+  <div class="screen" id="main-menu" data-screen-label="Main menu">
+    <div class="game-title">FATEBOUND</div>
+    <div class="game-sub">A roguelite dungeon crawl</div>
+    <button class="menu-btn primary" id="btn-continue" style="display:none">Continue</button>
+    <button class="menu-btn" id="btn-new-run">New Run</button>
+    <div id="menu-meta"></div>
+    <div id="menu-controls">WASD move &nbsp;·&nbsp; mouse aim &nbsp;·&nbsp; LMB attack &nbsp;·&nbsp; RMB cast spell &nbsp;·&nbsp; Q weapon skill &nbsp;·&nbsp; SPACE dodge &nbsp;·&nbsp; E interact &nbsp;·&nbsp; T town portal &nbsp;·&nbsp; 1/2 potions &nbsp;·&nbsp; I/C panels</div>
+  </div>
+
+  <!-- Death screen -->
+  <div class="screen" id="death-screen" data-screen-label="Death screen">
+    <div id="death-title">YOU HAVE FALLEN</div>
+    <div id="death-sub">Your embers return with you. Items and boons are lost to the dark.</div>
+    <div id="death-stats"></div>
+    <button class="menu-btn primary" id="btn-death-town">Return to the Camp</button>
+  </div>
+
+  <script src="js/core.js"></script>
+  <script src="js/items.js"></script>
+  <script src="js/skills.js"></script>
+  <script src="js/dungeon.js"></script>
+  <script src="js/entities.js"></script>
+  <script src="js/textures.js"></script>
+  <script src="js/props.js"></script>
+  <script src="js/char_paint.js"></script>
+  <script src="js/char_hero.js"></script>
+  <script src="js/char_monsters.js"></script>
+  <script src="js/char_monsters2.js"></script>
+  <script src="js/char_monsters3.js"></script>
+  <script src="js/char_pets.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>
