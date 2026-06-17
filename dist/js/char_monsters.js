@@ -27,8 +27,8 @@ function drawEnemy(ctx, e) {
   const lunge = e.lungeT ? Math.sin((1 - e.lungeT / 0.2) * Math.PI) * 6 : 0;
   const fa = worldAngToScreen(e.dir || 0);
   const lx = Math.cos(fa) * lunge, ly = Math.sin(fa) * lunge;
-  const indiv = 0.94 + ((e.t * 13) % 1) * 0.12;          // stable per-individual size variety
-  const sc = e.def.scale * (e.elite ? 1.25 : 1) * 1.12 * indiv; // looming DA presence
+  const indiv = e.sizeVar || 1;                          // stable per-individual size variety
+  const sc = e.def.scale * (e.boss ? 1.62 : e.elite ? 1.25 : 1) * 1.12 * indiv; // looming DA presence
   ctx.save();
   ctx.translate(s.x + lx, s.y + ly * 0.5);
   shadow(ctx, { x: 0, y: 0 }, 11 * sc);
@@ -63,9 +63,9 @@ function drawEnemy(ctx, e) {
   if (e.elite) {
     ctx.save();
     const mod = (typeof ELITE_MOD_INFO !== 'undefined' && ELITE_MOD_INFO[e.eliteMod]) || null;
-    const mc = mod ? mod.color : '#ff9c4a';
+    const mc = e.boss ? '#ff352a' : (mod ? mod.color : '#ff9c4a');
     ctx.strokeStyle = hexA(mc, 0.7);
-    ctx.lineWidth = 1.6;
+    ctx.lineWidth = e.boss ? 2.4 : 1.6;
     ctx.beginPath(); ctx.ellipse(s.x, s.y + 1, 14 * sc, 6.5 * sc, 0, 0, 7); ctx.stroke();
     // nameplate: name + power, above the health bar
     const ny = s.y - 44 * sc;
@@ -73,14 +73,15 @@ function drawEnemy(ctx, e) {
     ctx.font = '700 12px "Source Sans 3", sans-serif';
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
     ctx.fillText(e.eliteName || e.def.name, s.x + 1, ny - 17);
-    ctx.fillStyle = '#ffd9a0';
+    ctx.fillStyle = e.boss ? '#ff8a7a' : '#ffd9a0';
     ctx.fillText(e.eliteName || e.def.name, s.x, ny - 18);
-    if (mod) {
+    const subLabel = e.boss ? 'GUARDIAN' : (mod ? mod.label.toUpperCase() : null);
+    if (subLabel) {
       ctx.font = '600 10px "Source Sans 3", sans-serif';
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillText(mod.label.toUpperCase(), s.x + 1, ny - 6);
+      ctx.fillText(subLabel, s.x + 1, ny - 6);
       ctx.fillStyle = mc;
-      ctx.fillText(mod.label.toUpperCase(), s.x, ny - 7);
+      ctx.fillText(subLabel, s.x, ny - 7);
     }
     const w = 38 * sc, k = clamp(e.hp / e.maxHp, 0, 1);
     ctx.fillStyle = 'rgba(0,0,0,0.62)';

@@ -236,10 +236,41 @@ function spawnEnemies(map, floor) {
       xp: Math.round(t.xp * (1 + (floor - 1) * 0.3) * (elite ? 2.5 : 1)),
       elite, eliteMod, eliteName,
       aggro: false, atkCd: rf(rng, 0, 1), hurtT: 0, t: rf(rng, 0, 9),
+      sizeVar: rf(rng, 0.9, 1.12),
       dead: false, dir: rf(rng, 0, 6.28), wanderT: 0,
     });
   }
+  if (map.chest) spawnGuardian(map, floor, rng, out);
   return out;
+}
+
+// ---------- chest guardian miniboss ----------
+const GUARDIAN_TITLES = ['the Hoardkeeper', 'Warden of the Vault', 'the Coffer-Bound', 'the Gilded Tyrant', 'Keeper of Spoils', 'the Vaultsworn'];
+function spawnGuardian(map, floor, rng, out) {
+  const roster = THEME_ROSTERS[map.themeKey] || THEME_ROSTERS.halls;
+  // prefer a heavy bruiser type for the theme; fall back to roster
+  const heavy = ['knight', 'brute'].filter(t => roster.includes(t));
+  const type = heavy.length ? pick(rng, heavy) : pick(rng, roster);
+  const t = ENEMY_TYPES[type];
+  const hpMul = 1 + (floor - 1) * 0.24, dmgMul = 1 + (floor - 1) * 0.14;
+  const name = pick(rng, ELITE_NAME_A) + pick(rng, ELITE_NAME_B) + ', ' + pick(rng, GUARDIAN_TITLES);
+  // find a walkable cell adjacent to the chest
+  let gx = map.chest.x, gy = map.chest.y;
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1]]) {
+    if (tileAt(map, Math.floor(gx + dx), Math.floor(gy + dy)) === 1) { gx += dx * 0.7; gy += dy * 0.7; break; }
+  }
+  out.push({
+    type, def: t,
+    x: gx, y: gy, r: t.r * 1.5,
+    hp: t.hp * hpMul * 4.2, maxHp: t.hp * hpMul * 4.2,
+    dmg: t.dmg * dmgMul * 1.7,
+    spd: t.spd * 0.96,
+    xp: Math.round(t.xp * (1 + (floor - 1) * 0.3) * 4),
+    elite: true, boss: true, guardsChest: true, chest: map.chest,
+    eliteMod: 'frenzied', eliteName: name,
+    aggro: false, atkCd: rf(rng, 0, 1), hurtT: 0, t: rf(rng, 0, 9),
+    sizeVar: 1, dead: false, dir: rf(rng, 0, 6.28), wanderT: 0,
+  });
 }
 
 // ---------- combat ----------
@@ -290,9 +321,105 @@ function killEnemy(e) {
   const deathC = (typeof GORE_PARTICLE !== 'undefined' && GORE_PARTICLE[e.type]) || '#8a8276';
   addParticles(e.x, e.y, 14, deathC, 3.5, 3);
   dropLoot(e.x, e.y, STATE.floor, e.elite);
+  // guardian falls -> its chest unlocks
+  if (e.guardsChest && e.chest) {
+    e.chest.locked = false;
+    addParticles(e.chest.x, e.chest.y, 30, '#ff352a', 5, 3.5);
+    addFloater(e.chest.x, e.chest.y, 'The vault is unsealed', '#ff8a7a', true);
+    uiToast('The guardian falls — its chest is yours to claim.');
+  }
+  questOnKill(e);
   // pack alert
   for (const o of STATE.enemies)
     if (!o.dead && dist(o.x, o.y, e.x, e.y) < 4) o.aggro = true;
+}
+
+// open a guardian's chest: a burst of rich loot, biased toward high rarity
+function openChest(chest) {
+  const p = STATE.player;
+  const floor = STATE.floor;
+  chest.opened = true;
+  addParticles(chest.x, chest.y, 36, '#ffd24a', 5, 3.5);
+  STATE.shake = Math.min(8, STATE.shake + 3);
+  const gold = Math.round(mri(30, 60) * (1 + floor * 0.35) * (1 + p.d.goldFind));
+  STATE.pickups.push({ kind: 'gold', x: chest.x, y: chest.y + 0.3, amt: gold, t: 0 });
+  STATE.pickups.push({ kind: 'ember', x: chest.x - 0.4, y: chest.y + 0.3, amt: Math.round(mri(3, 6) * (1 + p.d.emberFind)), t: 0 });
+  // 3 quality items; first is guaranteed rare+, with a real shot at legendary
+  const jit = () => mrf(-0.5, 0.5);
+  for (let i = 0; i < 3; i++) {
+    let item;
+    if (i === 0) {
+      const r = Math.random();
+      const rarity = r < 0.16 ? 'legendary' : r < 0.5 ? 'epic' : 'rare';
+      item = rollItem(Math.max(1, floor + 1), { rarity });
+    } else {
+      item = rollItem(Math.max(1, floor + 1), { luck: 0.45 });
+    }
+    STATE.pickups.push({ kind: 'item', x: chest.x + jit(), y: chest.y + 0.4 + jit(), item, t: 0 });
+  }
+  uiToast('You throw open the guardian\u2019s chest!');
+}
+
+// ---------- per-floor challenges ----------
+function pluralName(type) {
+  const n = ENEMY_TYPES[type].name;
+  return /s$/.test(n) ? n : n + 's';
+}
+function generateQuest(map, floor) {
+  const qrng = mulberry32((map.seed ^ 0x51ed2701) >>> 0);
+  const counts = {};
+  for (const e of STATE.enemies) if (!e.boss) counts[e.type] = (counts[e.type] || 0) + 1;
+  const types = Object.keys(counts);
+  const roll = qrng();
+
+  if (roll < 0.36 && types.length) {
+    // cull a specific monster type
+    const type = types[Math.floor(qrng() * types.length)];
+    const target = Math.min(counts[type], 5 + Math.floor(floor * 0.7));
+    return { kind: 'killType', type, target, n: 0, done: false,
+      title: 'Cull the ' + pluralName(type) };
+  }
+  if (roll < 0.68) {
+    // gather dark shards strewn about the floor
+    const target = Math.min(12, 5 + Math.floor(floor * 0.6));
+    const cells = floorCells(map).filter(c =>
+      dist(c.x + 0.5, c.y + 0.5, map.spawn.x, map.spawn.y) > 5);
+    for (let i = 0; i < target && cells.length; i++) {
+      const c = cells.splice(Math.floor(qrng() * cells.length), 1)[0];
+      STATE.pickups.push({ kind: 'shard', x: c.x + 0.5, y: c.y + 0.5, t: 0, seed: (qrng() * 1e6) | 0 });
+    }
+    return { kind: 'collect', target, n: 0, done: false, title: 'Gather the Dark Shards' };
+  }
+  // cleanse: slay every foe on the floor
+  const total = STATE.enemies.filter(e => !e.boss).length;
+  return { kind: 'cleanse', target: total, n: 0, done: false, title: 'Cleanse the Floor' };
+}
+function questText(q) {
+  if (!q) return '';
+  if (q.kind === 'killType') return `Slay ${pluralName(q.type)}`;
+  if (q.kind === 'collect') return 'Collect dark shards';
+  return 'Slay every foe';
+}
+function questOnKill(e) {
+  const q = STATE.quest;
+  if (!q || q.done || e.boss) return;
+  if (q.kind === 'killType' && e.type === q.type) q.n++;
+  else if (q.kind === 'cleanse') q.n++;
+  if (q.n >= q.target) questComplete();
+}
+function questComplete() {
+  const q = STATE.quest;
+  if (!q || q.done) return;
+  q.done = true;
+  const p = STATE.player, floor = STATE.floor;
+  const embers = Math.round((3 + floor) * (1 + p.d.emberFind));
+  STATE.meta.embers += embers; STATE.run.embersFound += embers; saveMeta();
+  const gold = Math.round(mri(20, 40) * (1 + floor * 0.3) * (1 + p.d.goldFind));
+  STATE.pickups.push({ kind: 'gold', x: p.x + mrf(-0.5, 0.5), y: p.y + 0.6, amt: gold, t: 0 });
+  STATE.pickups.push({ kind: 'item', x: p.x + mrf(-0.5, 0.5), y: p.y + 0.8, item: rollItem(Math.max(1, floor + 1), { luck: 0.4 }), t: 0 });
+  addParticles(p.x, p.y, 28, '#ffd24a', 4.5, 3.5);
+  addFloater(p.x, p.y, 'Challenge complete!', '#ffd24a', true);
+  uiToast(`Floor challenge complete — +${embers} embers`);
 }
 
 function dropLoot(x, y, floor, elite) {
@@ -748,7 +875,7 @@ function updatePlayer(dt) {
   p.dir = Math.atan2(mw.y - p.y, mw.x - p.x);
 
   // dodge
-  if (consumePressed(' ') && p.dodgeCd <= 0) {
+  if ((consumePressed(' ') || consumePressed('shift')) && p.dodgeCd <= 0) {
     p.dodgeCd = p.d.legends.phantomstep ? 0.55 : 1.1;   // Sevenleague Stride cools twice as fast
     p.dodgeT = 0.22;
     const dlen = len > 0.01;
@@ -808,6 +935,11 @@ function collectPickup(pk) {
     if (p.potions.mp >= p.d.potionCap) return;
     p.potions.mp++;
     addFloater(pk.x, pk.y, '+mana potion', '#7fb4ff');
+  } else if (pk.kind === 'shard') {
+    addParticles(pk.x, pk.y, 6, '#c9a0ff', 2.5, 2.5);
+    addFloater(pk.x, pk.y, '+dark shard', '#c9a0ff');
+    const q = STATE.quest;
+    if (q && q.kind === 'collect' && !q.done) { q.n++; if (q.n >= q.target) questComplete(); }
   }
   pk.got = true;
 }

@@ -272,6 +272,19 @@ function generateFloor(floor, runSeed) {
   map.stairs = { x: far.x + 0.5, y: far.y + 0.5 };
   map.interactables.push({ type: 'stairs', x: far.x + 0.5, y: far.y + 0.5 });
 
+  // guardian chest: a far cell, away from both spawn and stairs
+  const chestCells = cells.filter(c =>
+    (c.x !== far.x || c.y !== far.y) &&
+    dist(c.x, c.y, spawnCell.x, spawnCell.y) > 9 &&
+    dist(c.x, c.y, far.x, far.y) > 3);
+  if (chestCells.length) {
+    const cc = pick(rng, chestCells);
+    const chest = { type: 'chest', x: cc.x + 0.5, y: cc.y + 0.5, opened: false, locked: true };
+    map.chest = chest;
+    map.props.push(chest);
+    map.interactables.push(chest);
+  }
+
   buildWalls(map);
   placeTorches(map, rng, themeKey === 'crypt' ? 0.014 : 0.02);
   placeCrates(map, rng, ri(rng, 6, 10));

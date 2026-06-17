@@ -37,6 +37,17 @@ function updateHUD() {
   $('hud-gold').textContent = fmt(p.gold);
   $('hud-embers').textContent = fmt(STATE.meta.embers);
   $('hud-floor').textContent = floorTitle(STATE.floor);
+  // floor challenge tracker
+  const qel = $('hud-quest');
+  const q = STATE.quest;
+  if (q) {
+    qel.style.display = 'inline-flex';
+    qel.classList.toggle('done', !!q.done);
+    qel.querySelector('.q-title').textContent = q.title;
+    qel.querySelector('.q-prog').textContent = q.done ? '✓ Complete' : `${Math.min(q.n, q.target)} / ${q.target}`;
+  } else {
+    qel.style.display = 'none';
+  }
   $('pot-hp-n').textContent = p.potions.hp;
   $('pot-mp-n').textContent = p.potions.mp;
   $('pot-hp').classList.toggle('empty', p.potions.hp <= 0);

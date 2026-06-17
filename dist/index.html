@@ -55,6 +55,17 @@
     border-radius: 2px; transform: rotate(45deg);
     background: radial-gradient(circle at 35% 35%, #ffc88a, #e06b1f);
   }
+  #hud-quest {
+    position: absolute; top: 46px; left: 50%; transform: translateX(-50%);
+    font-size: 13px; letter-spacing: 0.04em; color: var(--parchment);
+    background: rgba(18,14,11,0.6); border: 1px solid rgba(255,255,255,0.12);
+    padding: 5px 13px; border-radius: 4px; display: none; white-space: nowrap;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.85); align-items: center;
+  }
+  #hud-quest .q-title { color: var(--gold); font-family: "Cinzel", serif; letter-spacing: 0.1em; font-size: 12px; }
+  #hud-quest .q-prog { color: #c9a0ff; font-weight: 700; margin-left: 9px; font-variant-numeric: tabular-nums; }
+  #hud-quest.done { border-color: rgba(125,220,138,0.55); }
+  #hud-quest.done .q-prog { color: #7ddc8a; }
   #hud-bottom {
     position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
     display: flex; align-items: flex-end; gap: 14px; pointer-events: auto;
@@ -315,6 +326,7 @@
   <!-- HUD -->
   <div id="hud">
     <div id="hud-floor" data-screen-label="HUD"></div>
+    <div id="hud-quest"><span class="q-title"></span><span class="q-prog"></span></div>
     <div id="minimap-wrap"><canvas id="minimap" width="172" height="172"></canvas></div>
     <div id="toast"></div>
     <div id="hud-topright">
@@ -391,7 +403,7 @@
     <button class="menu-btn primary" id="btn-continue" style="display:none">Continue</button>
     <button class="menu-btn" id="btn-new-run">New Run</button>
     <div id="menu-meta"></div>
-    <div id="menu-controls">WASD move &nbsp;·&nbsp; mouse aim &nbsp;·&nbsp; LMB attack &nbsp;·&nbsp; RMB cast spell &nbsp;·&nbsp; Q weapon skill &nbsp;·&nbsp; SPACE dodge &nbsp;·&nbsp; E interact &nbsp;·&nbsp; T town portal &nbsp;·&nbsp; 1/2 potions &nbsp;·&nbsp; I/C panels</div>
+    <div id="menu-controls">WASD move &nbsp;·&nbsp; mouse aim &nbsp;·&nbsp; LMB attack &nbsp;·&nbsp; RMB cast spell &nbsp;·&nbsp; Q weapon skill &nbsp;·&nbsp; SPACE / SHIFT dodge &nbsp;·&nbsp; E interact &nbsp;·&nbsp; T town portal &nbsp;·&nbsp; 1/2 potions &nbsp;·&nbsp; I/C panels</div>
   </div>
 
   <!-- Death screen -->

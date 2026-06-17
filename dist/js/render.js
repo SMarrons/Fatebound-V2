@@ -386,6 +386,7 @@ function interactLabel(it) {
     case 'altar': return '[E]  Altar of Fate — spend embers';
     case 'stairs': return '[E]  Descend the stairs';
     case 'gate': return '[E]  Enter the dungeon';
+    case 'chest': return it.opened ? 'An emptied chest' : it.locked ? 'Sealed — slay its guardian' : '[E]  Open the guardian\u2019s chest';
     case 'portal': return '[E]  Step through the portal';
     case 'campfire': return '[E]  Rest at the fire';
   }

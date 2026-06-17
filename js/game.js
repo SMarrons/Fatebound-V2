@@ -72,7 +72,7 @@ function startNewRun() {
   STATE.player = newPlayer(STATE.meta);
   enterFloor(0);
   uiSetScreen('game');
-  uiToast('WASD move · LMB attack · RMB cast · Q skill · T portal · E interact');
+  uiToast('WASD move · LMB attack · RMB cast · Q skill · Space/Shift dodge · T portal · E interact');
 }
 
 function continueRun() {
@@ -98,6 +98,7 @@ function enterFloor(floor) {
   STATE.pickups = [];
   STATE.particles = [];
   STATE.floaters = [];
+  STATE.quest = (floor === 0 || isSanctuaryFloor(floor)) ? null : generateQuest(STATE.map, floor);
   const p = STATE.player;
   p.x = STATE.map.spawn.x;
   p.y = STATE.map.spawn.y;
@@ -161,6 +162,12 @@ function doInteract(it) {
       break;
     }
     case 'gate': enterFloor(1); break;
+    case 'chest': {
+      if (it.opened) { uiToast('The chest has already been emptied.'); break; }
+      if (it.locked) { uiToast('A fell guardian seals this chest. Slay it first.'); break; }
+      openChest(it);
+      break;
+    }
     case 'portal': {
       const rp = STATE.runPortal;
       if (!rp) break;
