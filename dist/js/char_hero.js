@@ -313,15 +313,19 @@ function drawHeroWeapon(ctx, s, ang, w, p, bob) {
   const type = w ? w.type : 'sword';
   const rare = w && w.rarity !== 'common';
   const wLeg = w && w.power;
+  const el = w && w.element ? ELEMENTS[w.element] : null;
+  const vr = (w && w.variant) || 0;
   ctx.lineCap = 'round';
+  const bladeLit = el ? el.glow : '#cfd6dc';
+  const bladeDk = el ? el.color : '#4d555d';
   // steel blade with edge + fuller
   const blade = (x0, x1, lw) => {
-    ctx.strokeStyle = '#4d555d'; ctx.lineWidth = lw + 1.8;
+    ctx.strokeStyle = bladeDk; ctx.lineWidth = lw + 1.8;
     ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x1, 0); ctx.stroke();
-    ctx.strokeStyle = '#cfd6dc'; ctx.lineWidth = lw;
+    ctx.strokeStyle = bladeLit; ctx.lineWidth = lw;
     ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x1, 0); ctx.stroke();
     // tip taper
-    ctx.fillStyle = '#cfd6dc';
+    ctx.fillStyle = bladeLit;
     ctx.beginPath(); ctx.moveTo(x1, -lw * 0.5); ctx.lineTo(x1 + lw * 1.1, 0); ctx.lineTo(x1, lw * 0.5); ctx.closePath(); ctx.fill();
     // fuller groove + edge highlight
     ctx.strokeStyle = 'rgba(70,80,90,0.6)'; ctx.lineWidth = lw * 0.26;
@@ -329,6 +333,27 @@ function drawHeroWeapon(ctx, s, ang, w, p, bob) {
     ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(x0 + 1, -lw * 0.32); ctx.lineTo(x1 - 1, -lw * 0.32); ctx.stroke();
   };
+  // curved saber blade (variant 1)
+  const sabreBlade = (x0, x1, lw) => {
+    const my = -lw * 1.7;
+    ctx.fillStyle = bladeDk;
+    ctx.beginPath(); ctx.moveTo(x0, lw * 0.6); ctx.quadraticCurveTo((x0 + x1) / 2, my - 1.4, x1 + lw, -1);
+    ctx.quadraticCurveTo((x0 + x1) / 2, my + lw, x0, -lw * 0.6); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = bladeLit;
+    ctx.beginPath(); ctx.moveTo(x0, lw * 0.2); ctx.quadraticCurveTo((x0 + x1) / 2, my - 0.4, x1 + lw, -1);
+    ctx.quadraticCurveTo((x0 + x1) / 2, my + lw * 0.6, x0, -lw * 0.2); ctx.closePath(); ctx.fill();
+  };
+  // serrated / spiked blade (variant 2)
+  const spikeBlade = (x0, x1, lw) => {
+    ctx.fillStyle = bladeDk;
+    ctx.beginPath(); ctx.moveTo(x0, -lw * 0.6); ctx.lineTo(x0, lw * 0.6);
+    const n = 4;
+    for (let i = 0; i <= n; i++) { const k = i / n; const bx = x0 + (x1 - x0) * k; ctx.lineTo(bx, lw * 0.6 - (i % 2) * lw * 1.5); }
+    ctx.lineTo(x1 + lw, 0); ctx.lineTo(x1, -lw * 0.6); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = bladeLit;
+    ctx.fillRect(x0, -lw * 0.45, x1 - x0, lw * 0.5);
+  };
+  const drawSword = (x0, x1, lw) => { if (vr === 1) sabreBlade(x0, x1, lw); else if (vr === 2) spikeBlade(x0, x1, lw); else blade(x0, x1, lw); };
   // leather-wrapped grip with bands + pommel
   const grip = (x0, x1, lw) => {
     ctx.strokeStyle = '#3c2f20'; ctx.lineWidth = lw;
@@ -344,11 +369,13 @@ function drawHeroWeapon(ctx, s, ang, w, p, bob) {
     ctx.fillStyle = 'rgba(255,240,200,0.5)';
     ctx.beginPath(); ctx.arc(x0 - 1.2, -0.5, 0.6, 0, 7); ctx.fill();
   };
-  if (rare) { ctx.shadowColor = rc; ctx.shadowBlur = wLeg ? 11 + Math.sin(STATE.time * 5) * 3 : (w.rarity === 'epic' ? 9 : 7); }
+  if (wLeg) { ctx.shadowColor = rc; ctx.shadowBlur = 11 + Math.sin(STATE.time * 5) * 3; }
+  else if (el) { ctx.shadowColor = el.glow; ctx.shadowBlur = 8; }
+  else if (rare) { ctx.shadowColor = rc; ctx.shadowBlur = w.rarity === 'epic' ? 9 : 7; }
   switch (type) {
     case 'sword':
       grip(-1, 3, 2.8);
-      blade(4.5, 21, 3.2);
+      drawSword(4.5, 21, 3.2);
       // crossguard with quillon balls
       ctx.strokeStyle = rc; ctx.lineWidth = 2.2;
       ctx.beginPath(); ctx.moveTo(4, -4.4); ctx.lineTo(4, 4.4); ctx.stroke();
@@ -358,7 +385,7 @@ function drawHeroWeapon(ctx, s, ang, w, p, bob) {
       break;
     case 'dagger':
       grip(0, 3, 2.4);
-      blade(3.6, 13.5, 2.6);
+      if (vr === 1) sabreBlade(3.6, 13.5, 2.6); else if (vr === 2) spikeBlade(3.6, 13.5, 2.6); else blade(3.6, 13.5, 2.6);
       ctx.strokeStyle = rc; ctx.lineWidth = 1.8;
       ctx.beginPath(); ctx.moveTo(3.5, -3); ctx.lineTo(3.5, 3); ctx.stroke();
       break;

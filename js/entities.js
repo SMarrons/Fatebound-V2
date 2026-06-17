@@ -188,6 +188,7 @@ const ENEMY_TYPES = {
 };
 const THEME_ROSTERS = {
   halls: ['rat', 'rat', 'skeleton', 'skeleton', 'archer'],
+  timber: ['rat', 'brute', 'brute', 'shaman', 'archer', 'skeleton'],
   caves: ['spider', 'spider', 'brute', 'shaman', 'rat'],
   crypt: ['skeleton', 'wraith', 'wraith', 'knight', 'archer', 'shaman'],
 };
@@ -274,10 +275,30 @@ function spawnGuardian(map, floor, rng, out) {
 }
 
 // ---------- combat ----------
-function hitEnemy(e, amt, crit, fromSkill, noLeg) {
+// element status: fire(burn DoT) · lightning(shock=+crit taken) · cold(chill=slow)
+function applyStatus(e, element, fromSkill) {
+  if (!e || e.dead) return;
+  const p = STATE.player;
+  const base = (p.d.dmgMin + p.d.dmgMax) * 0.5;
+  if (element === 'fire') {
+    igniteEnemy(e, base * (fromSkill ? 0.5 : 0.35), 3);
+    addParticles(e.x, e.y, 4, '#ff7a2a', 2, 2.2);
+  } else if (element === 'lightning') {
+    e.shockT = Math.max(e.shockT || 0, 4);
+    addParticles(e.x, e.y, 5, '#cfeaff', 3, 2.2);
+  } else if (element === 'cold') {
+    e.chillT = Math.max(e.chillT || 0, 3);
+    e.slowT = Math.max(e.slowT || 0, 3);
+    addParticles(e.x, e.y, 5, '#bfe8ff', 2.5, 2.2);
+  }
+}
+
+function hitEnemy(e, amt, crit, fromSkill, noLeg, element) {
   const p = STATE.player;
   if (fromSkill) amt *= (1 + p.d.spDmg);
   if (e.eliteMod === 'stonehide') amt *= 0.7;
+  // shock: shocked foes are far likelier to be critically struck
+  if (!crit && e.shockT > 0 && Math.random() < 0.4) { crit = true; amt *= p.d.critDmg; }
   e.hp -= amt;
   e.hurtT = 0.18;
   e.aggro = true;
@@ -286,6 +307,11 @@ function hitEnemy(e, amt, crit, fromSkill, noLeg) {
   addParticles(e.x, e.y, crit ? 10 : 5, crit ? '#ffd24a' : goreC, 3, 2.5);
   if (typeof paintHitBlood === 'function') paintHitBlood(e);
   if (p.d.lifeHit) healPlayer(p, p.d.lifeHit);
+  // on-hit elemental status (weapon enchant or spell element)
+  if (element && !e.dead) {
+    const chance = fromSkill ? 0.7 : 0.32;
+    if (Math.random() < chance) applyStatus(e, element, fromSkill);
+  }
   // ---- legendary on-hit powers ----
   const L = p.d.legends || {};
   if (!noLeg) {
@@ -459,15 +485,17 @@ function breakCrate(prop) {
     STATE.pickups.push({ kind: 'item', x: prop.x, y: prop.y, item: rollItem(Math.max(1, floor)), t: 0 });
 }
 
-function meleeSweep(x, y, dirAng, range, arc, dmgFn, fromSkill) {
+function meleeSweep(x, y, dirAng, range, arc, dmgFn, fromSkill, element) {
   for (const e of STATE.enemies) {
     if (e.dead) continue;
     const d = dist(x, y, e.x, e.y);
     if (d > range + e.r) continue;
     const a = Math.atan2(e.y - y, e.x - x);
     if (Math.abs(angDiff(dirAng, a)) > arc / 2 && d > 0.7) continue;
-    const { amt, crit } = dmgFn();
-    hitEnemy(e, amt, crit, fromSkill);
+    // don't strike through walls
+    if (d > 0.7 && !losClear(STATE.map, x, y, e.x, e.y)) continue;
+    const r = dmgFn(e);
+    hitEnemy(e, r.amt, r.crit, fromSkill, false, element);
     // small knockback
     e.x += Math.cos(a) * 0.18; e.y += Math.sin(a) * 0.18;
     if (circleHitsSolid(STATE.map, e.x, e.y, e.r)) { e.x -= Math.cos(a) * 0.18; e.y -= Math.sin(a) * 0.18; }
@@ -494,9 +522,10 @@ function playerAttack(p) {
   p.swingDir *= -1;
   const cls = d.cls;
   const L = d.legends || {};
+  const el = w && w.element;
   if (!w || cls === 'melee') {
     // Skyreach cleaves a full circle; otherwise the weapon's normal arc
-    meleeSweep(p.x, p.y, p.dir, d.range, d.arc, () => rollPlayerDamage(p));
+    meleeSweep(p.x, p.y, p.dir, d.range, d.arc, () => rollPlayerDamage(p), false, el);
   } else if (cls === 'ranged' && L.multishot && w.type === 'bow') {
     // Wolfsong: every shot is a fan of three
     for (let i = -1; i <= 1; i++) {
@@ -505,7 +534,7 @@ function playerAttack(p) {
       spawnProjectile({
         x: p.x + Math.cos(a) * 0.5, y: p.y + Math.sin(a) * 0.5,
         vx: Math.cos(a) * d.projSpd, vy: Math.sin(a) * d.projSpd,
-        dmg: amt, crit, friendly: true, pierce: d.pierce, kind: 'arrow', life: 1.4, hitSet: new Set(),
+        dmg: amt, crit, friendly: true, pierce: d.pierce, kind: 'arrow', life: 1.4, hitSet: new Set(), element: el,
       });
     }
   } else {
@@ -520,7 +549,7 @@ function playerAttack(p) {
       dmg: amt, crit, friendly: true, pierce: d.pierce, splash,
       homing: !!(L.homing && w.type === 'wand'),                                  // Whisperwind
       kind: isMagic ? (w.type === 'staff' ? 'fireball' : 'bolt') : 'arrow',
-      life: 1.4, hitSet: new Set(),
+      life: 1.4, hitSet: new Set(), element: el,
     });
   }
 }
@@ -641,7 +670,7 @@ function castSpell(p, spellId) {
         x: p.x + Math.cos(p.dir) * 0.5, y: p.y + Math.sin(p.dir) * 0.5,
         vx: Math.cos(p.dir) * 11, vy: Math.sin(p.dir) * 11,
         dmg: spellDamage(p, sp), crit: Math.random() * 100 < p.d.crit,
-        kind: 'fireball', splash: 1.1, life: 1.5, fromSkill: true, hitSet: new Set(),
+        kind: 'fireball', splash: 1.1, life: 1.5, fromSkill: true, hitSet: new Set(), element: 'fire',
       });
       break;
     }
@@ -651,7 +680,7 @@ function castSpell(p, spellId) {
       for (const e of STATE.enemies) {
         if (e.dead) continue;
         if (dist(p.x, p.y, e.x, e.y) < sp.radius + e.r) {
-          hitEnemy(e, spellDamage(p, sp), false, true);
+          hitEnemy(e, spellDamage(p, sp), false, true, false, 'cold');
           if (!e.dead) { e.slowT = 2.6; addParticles(e.x, e.y, 5, '#9ed8ff', 2, 2.5); }
         }
       }
@@ -670,7 +699,7 @@ function castSpell(p, spellId) {
       let from = { x: p.x, y: p.y };
       for (const e of targets) {
         STATE.fxLines.push({ x1: from.x, y1: from.y, x2: e.x, y2: e.y, t: 0, life: 0.3 });
-        hitEnemy(e, spellDamage(p, sp), Math.random() * 100 < p.d.crit, true);
+        hitEnemy(e, spellDamage(p, sp), Math.random() * 100 < p.d.crit, true, false, 'lightning');
         addParticles(e.x, e.y, 8, '#cfeaff', 3.5, 2.5);
         from = e;
       }
@@ -752,11 +781,24 @@ function updatePet(dt) {
   }
   const want = def.cls === 'melee' ? 0.55 : (def.range - 0.5);
   let moved = false;
+  // find nearby loot to fetch for the player (gold/embers/potions/shards — not gear)
+  let loot = null, ld = 6.5;
+  for (const pk of STATE.pickups) {
+    if (pk.got || pk.kind === 'item') continue;
+    const d = dist(pet.x, pet.y, pk.x, pk.y);
+    if (d < ld) { ld = d; loot = pk; }
+  }
   if (tgt && bd > (def.cls === 'melee' ? 0.9 : def.range)) {
     const a = Math.atan2(tgt.y - pet.y, tgt.x - pet.x);
     pet.dir = a;
     moveCircle(STATE.map, Object.assign(pet, { r: 0.24 }), Math.cos(a) * def.spd * dt, Math.sin(a) * def.spd * dt);
     moved = true;
+  } else if (!tgt && loot) {
+    // dart to the loot and scoop it up
+    const a = Math.atan2(loot.y - pet.y, loot.x - pet.x);
+    pet.dir = a;
+    if (ld < 0.5) { collectPickup(loot); addParticles(pet.x, pet.y, 4, '#ffd24a', 2, 2); }
+    else { moveCircle(STATE.map, Object.assign(pet, { r: 0.24 }), Math.cos(a) * def.spd * 1.1 * dt, Math.sin(a) * def.spd * 1.1 * dt); moved = true; }
   } else if (!tgt && dp > 1.4) {
     const a = Math.atan2(p.y - pet.y, p.x - pet.x);
     pet.dir = a;
@@ -951,16 +993,20 @@ function updateEnemies(dt) {
     if (e.dead) continue;
     e.t += dt;
     e.hurtT = Math.max(0, e.hurtT - dt);
-    e.atkCd = Math.max(0, e.atkCd - dt);
+    // chill slows the attack-cooldown recovery too
+    const chilled = e.chillT > 0;
+    e.atkCd = Math.max(0, e.atkCd - dt * (chilled ? 0.5 : 1));
     if (e.slowT) e.slowT = Math.max(0, e.slowT - dt);
-    // burning DoT from fire legendaries
+    if (e.shockT > 0) { e.shockT -= dt; if (Math.random() < dt * 5) addParticles(e.x + mrf(-0.4, 0.4), e.y - 0.4, 1, '#cfeaff', 1.5, 2.2); }
+    if (e.chillT > 0) { e.chillT -= dt; if (Math.random() < dt * 4) addParticles(e.x + mrf(-0.4, 0.4), e.y - 0.2, 1, '#bfe8ff', 1.2, 2); }
+    // burning DoT (fire legendaries / fire enchants / firebolt)
     if (e.burnT > 0) {
       e.burnT -= dt;
       e.hp -= (e.burnDps || 0) * dt;
       if (Math.random() < dt * 7) addParticles(e.x + mrf(-0.4, 0.4), e.y - 0.2, 1, '#ff7a2a', 1.5, 2.2);
       if (e.hp <= 0 && !e.dead) { killEnemy(e); continue; }
     }
-    const slowK = e.slowT > 0 ? 0.45 : 1;
+    const slowK = (e.slowT > 0 || chilled) ? 0.45 : 1;
     // elite auras
     if (e.eliteMod === 'regenerating' && e.hp < e.maxHp) {
       e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.03 * dt);
@@ -1068,7 +1114,7 @@ function updateProjectiles(dt) {
       for (const e of STATE.enemies) {
         if (e.dead || (pr.hitSet && pr.hitSet.has(e))) continue;
         if (dist(pr.x, pr.y, e.x, e.y) < pr.r + e.r) {
-          hitEnemy(e, pr.dmg, pr.crit, pr.fromSkill);
+          hitEnemy(e, pr.dmg, pr.crit, pr.fromSkill, false, pr.element);
           if (pr.splash) splashDamage(pr, e);
           if (pr.pierce > 0) { pr.pierce--; if (pr.hitSet) pr.hitSet.add(e); }
           else { pr.dead = true; break; }

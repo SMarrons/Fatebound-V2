@@ -39,14 +39,18 @@ function updateHUD() {
   $('hud-floor').textContent = floorTitle(STATE.floor);
   // floor challenge tracker
   const qel = $('hud-quest');
-  const q = STATE.quest;
-  if (q) {
-    qel.style.display = 'inline-flex';
-    qel.classList.toggle('done', !!q.done);
-    qel.querySelector('.q-title').textContent = q.title;
-    qel.querySelector('.q-prog').textContent = q.done ? '✓ Complete' : `${Math.min(q.n, q.target)} / ${q.target}`;
-  } else {
-    qel.style.display = 'none';
+  if (qel) {
+    const q = STATE.quest;
+    if (q) {
+      qel.style.display = 'inline-flex';
+      qel.classList.toggle('done', !!q.done);
+      const qt = qel.querySelector('.q-title');
+      const qp = qel.querySelector('.q-prog');
+      if (qt) qt.textContent = q.title;
+      if (qp) qp.textContent = q.done ? '✓ Complete' : `${Math.min(q.n, q.target)} / ${q.target}`;
+    } else {
+      qel.style.display = 'none';
+    }
   }
   $('pot-hp-n').textContent = p.potions.hp;
   $('pot-mp-n').textContent = p.potions.mp;

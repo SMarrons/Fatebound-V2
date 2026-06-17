@@ -78,6 +78,7 @@ const TEXTURE_STYLES = {
   halls:     { floor: 'flag',  wall: 'brick', fog: 'rgba(170,160,150,1)' },
   caves:     { floor: 'rock',  wall: 'rock',  fog: 'rgba(168,140,104,1)' },
   crypt:     { floor: 'crypt', wall: 'block', fog: 'rgba(130,170,180,1)' },
+  timber:    { floor: 'plank', wall: 'timber', fog: 'rgba(206,158,96,1)' },
 };
 
 // ---------- floor tiles (baked at 2x: 128x64) ----------
@@ -139,6 +140,23 @@ function _bakeFloor(styleKey, theme, rng, variant) {
       g2.addColorStop(0, 'rgba(190,220,235,0.05)'); g2.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H);
       if (rng() < 0.4) _crack(ctx, rng, 34 + rng() * 20, 16 + rng() * 10, 78 + rng() * 22, 36 + rng() * 14);
+      break;
+    }
+    case 'plank': { // timber floorboards running along the iso grain
+      ctx.strokeStyle = 'rgba(0,0,0,0.34)'; ctx.lineWidth = 2;
+      for (let i = -2; i <= 3; i++) {
+        const c = i * 11;
+        ctx.beginPath(); ctx.moveTo(-20, 0.5 * -20 + c + 16); ctx.lineTo(150, 0.5 * 150 + c + 16); ctx.stroke();
+      }
+      // board grain + knots
+      for (let i = 0; i < 5; i++) {
+        ctx.strokeStyle = 'rgba(60,40,20,0.22)'; ctx.lineWidth = 1;
+        const x = 14 + rng() * 96, y = 8 + rng() * 46;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 18 + rng() * 16, y + 9 + rng() * 8); ctx.stroke();
+        if (rng() < 0.4) { ctx.fillStyle = 'rgba(40,26,14,0.4)'; ctx.beginPath(); ctx.arc(x, y, 1.4 + rng() * 1.6, 0, 7); ctx.fill(); }
+      }
+      ctx.strokeStyle = 'rgba(255,225,170,0.08)'; ctx.lineWidth = 1;
+      for (let i = -2; i <= 3; i++) { const c = i * 11; ctx.beginPath(); ctx.moveTo(-20, 0.5 * -20 + c + 18); ctx.lineTo(150, 0.5 * 150 + c + 18); ctx.stroke(); }
       break;
     }
     case 'earth': { // packed dirt
@@ -248,11 +266,32 @@ function _bakeWallFace(styleKey, theme, rng, baseHex) {
       ctx.fillStyle = g2; ctx.fillRect(0, H - 26, W, 26);
       break;
     }
+    case 'timber': { // vertical timber beams / log wall
+      const plankW = 13;
+      for (let x = 0; x < W; x += plankW) {
+        ctx.fillStyle = _cs(_sh(base, -6 + rng() * 16));
+        ctx.fillRect(x + 1, 0, plankW - 2, H);
+        // wood grain streaks
+        ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 1;
+        for (let i = 0; i < 3; i++) {
+          const gx = x + 2 + rng() * (plankW - 4);
+          ctx.beginPath(); ctx.moveTo(gx, 0);
+          ctx.quadraticCurveTo(gx + (rng() - 0.5) * 3, H / 2, gx + (rng() - 0.5) * 4, H);
+          ctx.stroke();
+        }
+        ctx.fillStyle = 'rgba(255,225,170,0.07)'; ctx.fillRect(x + 1, 0, 2, H);
+        ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(x + plankW - 2.5, 0, 1.6, H);
+        // iron banding nails
+        if (rng() < 0.5) { ctx.fillStyle = 'rgba(20,16,12,0.6)'; ctx.beginPath(); ctx.arc(x + plankW / 2, 10 + rng() * (H - 20), 1.4, 0, 7); ctx.fill(); }
+      }
+      // horizontal iron straps
+      for (const sy of [H * 0.28, H * 0.72]) {
+        ctx.fillStyle = 'rgba(34,28,22,0.7)'; ctx.fillRect(0, sy, W, 4);
+        ctx.fillStyle = 'rgba(255,225,170,0.08)'; ctx.fillRect(0, sy, W, 1.2);
+      }
+      break;
+    }
     case 'earth': {
-      _blotches(ctx, rng, W, H, 10, 0.18, 0.07);
-      for (let i = 0; i < 6; i++) _pebble(ctx, rng, rng() * W, rng() * H, 2 + rng() * 3.4, base);
-      // root tendrils
-      ctx.strokeStyle = 'rgba(40,28,16,0.4)'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
       for (let i = 0; i < 2; i++) {
         if (rng() < 0.7) {
           const x = rng() * W;
@@ -307,11 +346,17 @@ function _bakeFog(tint) {
   const c = `${m[0]},${m[1]},${m[2]},`;
   for (let i = 0; i < 11; i++) {
     const x = rng() * W, y = rng() * H, r = 36 + rng() * 64;
-    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, `rgba(${c}${0.16 + rng() * 0.16})`);
-    g.addColorStop(1, `rgba(${c}0)`);
-    ctx.fillStyle = g;
-    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    const a = 0.16 + rng() * 0.16;
+    // draw each blob in a 3x3 wrapped grid so the texture tiles seamlessly
+    // (no visible seams = no drifting "tear bars" when drawFog tiles it)
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+      const bx = x + ox * W, by = y + oy * H;
+      const g = ctx.createRadialGradient(bx, by, 0, bx, by, r);
+      g.addColorStop(0, `rgba(${c}${a})`);
+      g.addColorStop(1, `rgba(${c}0)`);
+      ctx.fillStyle = g;
+      ctx.fillRect(bx - r, by - r, r * 2, r * 2);
+    }
   }
   return cv;
 }

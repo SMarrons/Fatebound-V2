@@ -339,6 +339,15 @@ function drawProjectile(ctx, pr) {
   const a = Math.atan2((pr.vx + pr.vy) * 0.5, pr.vx - pr.vy);
   ctx.save();
   ctx.translate(s.x, s.y - 14);
+  // elemental enchant aura on weapon projectiles (arrows/bolts with an element)
+  const _el = (pr.element && typeof ELEMENTS !== 'undefined') ? ELEMENTS[pr.element] : null;
+  if (_el) {
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 9);
+    g.addColorStop(0, hexA(_el.glow, 0.55)); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 9, 0, 7); ctx.fill();
+    ctx.restore();
+  }
   const orb = (r1, r2, cOut, cIn, cCore) => {
     const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r1);
     g.addColorStop(0, cOut); g.addColorStop(1, 'rgba(0,0,0,0)');
@@ -368,9 +377,52 @@ function drawProjectile(ctx, pr) {
       ctx.strokeStyle = '#fff3c4'; ctx.lineWidth = 1.6;
       ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(9, 0); ctx.stroke();
       break;
-    case 'bolt': orb(9, 4, 'rgba(158,203,255,0.5)', '#9ecbff', '#eaf6ff'); break;
-    case 'fireball': orb(12, 5.5, 'rgba(255,140,50,0.5)', '#ff9c4a', '#ffe9a0'); break;
-    case 'spark': orb(9, 3.5, 'rgba(125,220,138,0.5)', '#7ddc8a', '#d8ffd8'); break;
+    case 'bolt': {
+      // arcane bolt: crackling blue core + trailing wisp
+      const fl = 0.85 + Math.sin(STATE.time * 30 + pr.x * 9) * 0.15;
+      ctx.save(); ctx.rotate(a);
+      ctx.globalCompositeOperation = 'lighter';
+      const tg = ctx.createLinearGradient(-14, 0, 2, 0);
+      tg.addColorStop(0, 'rgba(120,170,255,0)'); tg.addColorStop(1, 'rgba(158,203,255,0.6)');
+      ctx.fillStyle = tg; ctx.beginPath(); ctx.moveTo(-15, 0); ctx.lineTo(2, -3); ctx.lineTo(2, 3); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      orb(10 * fl, 4.2, 'rgba(158,203,255,0.55)', '#9ecbff', '#eaf6ff');
+      break;
+    }
+    case 'fireball': {
+      // layered fireball: roiling outer glow, flame body, white-hot core + flickering tail
+      const fl = 0.85 + Math.sin(STATE.time * 26 + pr.x * 7) * 0.15;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      // comet tail opposite travel direction
+      ctx.save(); ctx.rotate(a);
+      for (let i = 1; i <= 5; i++) {
+        const tx = -i * 3.4, tr = (6 - i) * 1.5 * fl;
+        const tg = ctx.createRadialGradient(tx, 0, 0, tx, 0, tr);
+        tg.addColorStop(0, `rgba(255,${150 - i * 14},40,${0.4 - i * 0.06})`);
+        tg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = tg; ctx.beginPath(); ctx.arc(tx, 0, tr, 0, 7); ctx.fill();
+      }
+      ctx.restore();
+      // outer heat haze
+      const g1 = ctx.createRadialGradient(0, 0, 0, 0, 0, 15 * fl);
+      g1.addColorStop(0, 'rgba(255,120,30,0.6)'); g1.addColorStop(0.6, 'rgba(255,80,20,0.25)'); g1.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g1; ctx.beginPath(); ctx.arc(0, 0, 15 * fl, 0, 7); ctx.fill();
+      // flame body
+      ctx.fillStyle = '#ff7a1e'; ctx.beginPath(); ctx.arc(0, 0, 6.2, 0, 7); ctx.fill();
+      ctx.fillStyle = '#ffb43a'; ctx.beginPath(); ctx.arc(0.4 * fl, -0.4, 4.4, 0, 7); ctx.fill();
+      // white-hot core
+      ctx.fillStyle = '#fff2c4'; ctx.beginPath(); ctx.arc(0, 0, 2.4 * fl, 0, 7); ctx.fill();
+      ctx.restore();
+      break;
+    }
+    case 'spark': {
+      const fl = 0.85 + Math.sin(STATE.time * 22 + pr.x * 6) * 0.15;
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      orb(11 * fl, 4, 'rgba(125,220,138,0.55)', '#7ddc8a', '#e6ffe6');
+      ctx.restore();
+      break;
+    }
   }
   ctx.restore();
 }

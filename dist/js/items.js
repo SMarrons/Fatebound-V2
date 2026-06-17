@@ -42,6 +42,13 @@ const LEGENDARIES = [
 const LEG_KIND = { sword: 'weapon', dagger: 'weapon', spear: 'weapon', bow: 'weapon', crossbow: 'weapon', wand: 'weapon', staff: 'weapon', shield: 'offhand', helm: 'armor', chest: 'armor', boots: 'armor' };
 function legSlot(base) { return base === 'shield' ? 'off' : LEG_KIND[base] === 'weapon' ? 'main' : base; }
 
+// elemental enchantments: a chance to apply a status on hit + a graphical override
+const ELEMENTS = {
+  fire:      { name: 'Flaming', color: '#ff6a2a', glow: '#ff8a3a', tip: 'Chance to ignite — burns foes over time' },
+  cold:      { name: 'Frost',   color: '#7fc8ff', glow: '#bfe8ff', tip: 'Chance to chill — slows movement & attacks' },
+  lightning: { name: 'Storm',   color: '#b98cff', glow: '#d8c4ff', tip: 'Chance to shock — shocked foes take more crits' },
+};
+
 // class: melee scales w/ STR, ranged w/ DEX, magic w/ MAG
 const WEAPON_TYPES = {
   sword:    { label: 'Sword',    cls: 'melee',  min: 4, max: 7,  spd: 1.5,  range: 1.7,  arc: 1.75, twoH: false },
@@ -187,6 +194,14 @@ function rollItem(ilvl, opts) {
   item.rarity = rarity;
   item.name = nameItem(item.baseName, rarity, item.affixes);
   item.value = Math.round(RARITIES[rarity].value * (1 + ilvl * 0.22));
+  // weapon graphic variety (curved / spiked / etc) — stable per item
+  if (kind === 'weapon') item.variant = (Math.random() * 3) | 0;
+  // elemental enchant on some non-legendary weapons
+  if (kind === 'weapon' && !legend && rarity !== 'common' && Math.random() < 0.28) {
+    item.element = mpick(['fire', 'cold', 'lightning']);
+    item.name = ELEMENTS[item.element].name + ' ' + item.name;
+    item.value = Math.round(item.value * 1.25);
+  }
   if (legend) {
     item.legend = legend.id;
     item.power = legend.power;
@@ -253,43 +268,18 @@ function rollVendorStock(floor) {
 }
 
 // ---------- tooltips ----------
-function diffLine(label, d, digits) {
-  if (Math.abs(d) < 0.05) return '';
-  const cls = d > 0 ? 'tt-up' : 'tt-down';
-  const val = digits ? Math.abs(d).toFixed(digits) : Math.round(Math.abs(d));
-  return `<div class="tt-stat ${cls}">${d > 0 ? '+' : '−'}${val} ${label}</div>`;
-}
-function compareBlockHTML(item, eq) {
-  if (!eq || eq === item) return '';
-  let lines = '';
-  if (item.kind === 'weapon' && eq.kind === 'weapon') {
-    lines += diffLine('damage', (item.dmgMin + item.dmgMax) / 2 - (eq.dmgMin + eq.dmgMax) / 2, 1);
-    lines += diffLine('attacks/sec', item.spd - eq.spd, 2);
-    lines += diffLine('% crit', (item.baseCrit || 0) - (eq.baseCrit || 0));
-  } else {
-    lines += diffLine('armor', (item.armor || 0) - (eq.armor || 0));
-    lines += diffLine('% block', (item.block || 0) - (eq.block || 0));
-    lines += diffLine('mana', (item.mana || 0) - (eq.mana || 0));
-  }
-  return `<div class="tt-foot"><div class="tt-dim" style="margin-bottom:2px">vs equipped · <span style="color:${RARITIES[eq.rarity].color}">${eq.name}</span></div>${lines || '<div class="tt-stat tt-dim">compare the enchantments</div>'}</div>`;
-}
-function itemTooltipHTML(item, opts) {
-  opts = opts || {};
+// the body of a single item card (no buy/sell footer, no compare)
+function itemCardHTML(item) {
   const rc = RARITIES[item.rarity].color;
-  let foot = '';
-  if (opts.price != null) foot = `<div class="tt-foot">Buy: <b class="gold">${opts.price}g</b></div>`;
-  else if (opts.sell != null) foot = `<div class="tt-foot">Sell: <b class="gold">${opts.sell}g</b> <span class="tt-dim">(right-click)</span></div>`;
-  else if (opts.hint) foot = `<div class="tt-foot tt-dim">${opts.hint}</div>`;
-  const cmp = compareBlockHTML(item, opts.compare);
   if (item.kind === 'book' || item.kind === 'scroll') {
     const sp = SPELLS[item.spell];
-    let aff = item.affixes.map(a => `<div class="tt-affix">${affixLine(a)}</div>`).join('');
+    const aff = item.affixes.map(a => `<div class="tt-affix">${affixLine(a)}</div>`).join('');
     return `
       <div class="tt-name" style="color:${rc}">${item.name}</div>
       <div class="tt-type">Spellbook · equip, then right-click to cast</div>
       <div class="tt-stat">${sp.desc}</div>
       <div class="tt-stat tt-dim">${sp.cost} mana · ${sp.cd}s cooldown · scales with Magic</div>
-      ${aff}${cmp}${foot}`;
+      ${aff}`;
   }
   if (item.kind === 'pet') {
     const t = PET_TYPES[item.type];
@@ -297,8 +287,7 @@ function itemTooltipHTML(item, opts) {
       <div class="tt-name" style="color:${rc}">${item.name}</div>
       <div class="tt-type">Pet · ${t.cls} companion</div>
       <div class="tt-stat">Fights at your side. Only one pet may follow you.</div>
-      <div class="tt-stat tt-dim">Damage scales with your level (×${(PET_RARITY_MULT[item.rarity] || 1).toFixed(2)} ${RARITIES[item.rarity].name.toLowerCase()})</div>
-      ${cmp}${foot}`;
+      <div class="tt-stat tt-dim">Damage scales with your level (×${(PET_RARITY_MULT[item.rarity] || 1).toFixed(2)} ${RARITIES[item.rarity].name.toLowerCase()})</div>`;
   }
   let rows = '';
   if (item.kind === 'weapon') {
@@ -307,6 +296,7 @@ function itemTooltipHTML(item, opts) {
     if (item.baseCrit) rows += `<div class="tt-stat">+${item.baseCrit}% crit chance</div>`;
     if (item.pierce) rows += `<div class="tt-stat">Pierces ${item.pierce} enemy</div>`;
     if (item.splash) rows += `<div class="tt-stat">Splash damage on impact</div>`;
+    if (item.element) rows += `<div class="tt-stat" style="color:${ELEMENTS[item.element].color}">◆ ${ELEMENTS[item.element].tip}</div>`;
   } else {
     if (item.armor) rows += `<div class="tt-stat">${item.armor} armor</div>`;
     if (item.block) rows += `<div class="tt-stat">${item.block}% block chance</div>`;
@@ -314,12 +304,28 @@ function itemTooltipHTML(item, opts) {
     if (item.manaRegen) rows += `<div class="tt-stat">+${item.manaRegen.toFixed(1)} mana/sec</div>`;
     if (item.spDmg) rows += `<div class="tt-stat">+${Math.round(item.spDmg * 100)}% skill damage</div>`;
   }
-  let aff = item.affixes.map(a => `<div class="tt-affix">${affixLine(a)}</div>`).join('');
+  const aff = item.affixes.map(a => `<div class="tt-affix">${affixLine(a)}</div>`).join('');
   const leg = item.power ? `<div class="tt-legend">◈ ${item.powerText}</div>` : '';
   return `
     <div class="tt-name" style="color:${rc}">${item.name}</div>
     <div class="tt-type">${RARITIES[item.rarity].name} ${item.baseName} · lv ${item.ilvl}</div>
-    ${rows}${aff}${leg}${cmp}${foot}`;
+    ${rows}${aff}${leg}`;
+}
+function itemTooltipHTML(item, opts) {
+  opts = opts || {};
+  let foot = '';
+  if (opts.price != null) foot = `<div class="tt-foot">Buy: <b class="gold">${opts.price}g</b></div>`;
+  else if (opts.sell != null) foot = `<div class="tt-foot">Sell: <b class="gold">${opts.sell}g</b> <span class="tt-dim">(right-click)</span></div>`;
+  else if (opts.hint) foot = `<div class="tt-foot tt-dim">${opts.hint}</div>`;
+  // side-by-side comparison: hovered card next to the equipped card
+  if (opts.compare && opts.compare !== item) {
+    const eq = opts.compare;
+    return `<div class="tt-cards">
+      <div class="tt-card"><div class="tt-cardtag">Hovered</div>${itemCardHTML(item)}${foot}</div>
+      <div class="tt-card tt-card-eq"><div class="tt-cardtag">Equipped</div>${itemCardHTML(eq)}</div>
+    </div>`;
+  }
+  return itemCardHTML(item) + foot;
 }
 
 // ---------- icons (small vector canvases) ----------
@@ -330,14 +336,32 @@ function drawItemIcon(cv, item) {
   ctx.save();
   ctx.translate(S / 2, S / 2);
   const rc = RARITIES[item.rarity].color;
+  const el = item.element ? ELEMENTS[item.element] : null;
   if (item.rarity === 'legendary') { ctx.shadowColor = rc; ctx.shadowBlur = 6; }
-  const steel = '#aeb6bd', wood = '#8a6844', dark = '#3a3f45';
+  else if (el) { ctx.shadowColor = el.glow; ctx.shadowBlur = 7; }
+  const steel = el ? el.color : '#aeb6bd', wood = '#8a6844', dark = '#3a3f45';
+  const vr = item.variant || 0;
   function blade(len, wid, color) {
     ctx.save(); ctx.rotate(-Math.PI / 4);
     ctx.fillStyle = color; ctx.beginPath();
-    ctx.moveTo(-wid, len * 0.45); ctx.lineTo(-wid, -len * 0.35);
-    ctx.lineTo(0, -len * 0.55); ctx.lineTo(wid, -len * 0.35); ctx.lineTo(wid, len * 0.45);
-    ctx.closePath(); ctx.fill();
+    if (vr === 1) {
+      // curved saber
+      ctx.moveTo(-wid, len * 0.45);
+      ctx.quadraticCurveTo(-wid * 2.4, -len * 0.1, 0, -len * 0.55);
+      ctx.quadraticCurveTo(wid * 1.4, -len * 0.1, wid, len * 0.45);
+      ctx.closePath(); ctx.fill();
+    } else if (vr === 2) {
+      // serrated / spiked edge
+      ctx.moveTo(-wid, len * 0.45); ctx.lineTo(-wid, -len * 0.2);
+      ctx.lineTo(-wid * 2, -len * 0.2); ctx.lineTo(-wid * 0.5, -len * 0.4);
+      ctx.lineTo(-wid * 1.6, -len * 0.45); ctx.lineTo(0, -len * 0.58);
+      ctx.lineTo(wid, -len * 0.35); ctx.lineTo(wid, len * 0.45);
+      ctx.closePath(); ctx.fill();
+    } else {
+      ctx.moveTo(-wid, len * 0.45); ctx.lineTo(-wid, -len * 0.35);
+      ctx.lineTo(0, -len * 0.55); ctx.lineTo(wid, -len * 0.35); ctx.lineTo(wid, len * 0.45);
+      ctx.closePath(); ctx.fill();
+    }
     ctx.restore();
   }
   switch (item.type) {

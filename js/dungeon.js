@@ -23,6 +23,11 @@ const THEMES = {
     floorA: '#30373d', floorB: '#293035', wallTop: '#414c54', wallSide: '#232b31', wallSide2: '#1b2227',
     ambient: 'rgba(4,6,15,0.89)', lightWarmth: 'rgba(140,190,255,0.10)',
   },
+  timber: {
+    name: 'The Timber Halls',
+    floorA: '#6b4d28', floorB: '#5c4122', wallTop: '#7a5630', wallSide: '#4a3318', wallSide2: '#3a2814',
+    ambient: 'rgba(12,7,3,0.82)', lightWarmth: 'rgba(255,176,90,0.18)',
+  },
   sanctuary: {
     name: 'Sanctuary',
     floorA: '#4c4030', floorB: '#443a2b', wallTop: '#5e5140', wallSide: '#3a3226', wallSide2: '#2e281e',
@@ -35,7 +40,7 @@ function themeKeyForFloor(f) {
   if (f === 0) return 'town';
   if (isSanctuaryFloor(f)) return 'sanctuary';
   const band = Math.floor((f - 1) / 5); // 0:1-4, 1:6-9, 2:11-14, ...
-  return ['halls', 'caves', 'crypt'][band % 3];
+  return ['halls', 'timber', 'caves', 'crypt'][band % 4];
 }
 function floorTitle(f) {
   const t = THEMES[themeKeyForFloor(f)];
@@ -162,6 +167,7 @@ function genDecals(map, rng) {
   map.decals = [];
   const densities = {
     halls:     { bones: 0.010, rubble: 0.014, puddle: 0.008, moss: 0.006 },
+    timber:    { rubble: 0.012, moss: 0.010, bones: 0.006 },
     caves:     { bones: 0.006, rubble: 0.016, puddle: 0.005, moss: 0.030, mushroom: 0.012 },
     crypt:     { bones: 0.016, rubble: 0.012, puddle: 0.012, moss: 0.012 },
     town:      { rubble: 0.005, moss: 0.008 },

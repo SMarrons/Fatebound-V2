@@ -33,6 +33,13 @@ function drawEnemy(ctx, e) {
   ctx.translate(s.x + lx, s.y + ly * 0.5);
   shadow(ctx, { x: 0, y: 0 }, 11 * sc);
   groundContact(ctx, 0, 0, 6.5 * sc);
+  // elemental status ring at the feet (burn / shock / chill)
+  const statusC = e.burnT > 0 ? '#ff7a2a' : e.shockT > 0 ? '#bfa8ff' : e.chillT > 0 ? '#9ed8ff' : null;
+  if (statusC) {
+    ctx.strokeStyle = hexA(statusC, 0.5 + Math.sin(t * 8) * 0.2);
+    ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.ellipse(0, 1, 12 * sc, 5.5 * sc, 0, 0, 7); ctx.stroke();
+  }
   if (e.elite) { // elite aura tinted by its power
     const mc = (typeof ELITE_MOD_INFO !== 'undefined' && ELITE_MOD_INFO[e.eliteMod]) ? ELITE_MOD_INFO[e.eliteMod].color : '#ff9c4a';
     const g = ctx.createRadialGradient(0, -12, 2, 0, -12, 28);
